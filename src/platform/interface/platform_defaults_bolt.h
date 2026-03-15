@@ -42,16 +42,16 @@
 // Requires kbuild config ENABLE_AUTO_SHUTDOWN to be activated.
 #define DEFAULT_SYSTEM_SHUTDOWN_TIMEOUT_MIN       5
 
-// Default PID gains
-#define PID_ROLL_RATE_KP  250.0
-#define PID_ROLL_RATE_KI  500.0
-#define PID_ROLL_RATE_KD  2.5
+#define PID_ROLL_RATE_KP   35.0    // default 70.0
+#define PID_ROLL_RATE_KI   100.0   // default 200.0
+#define PID_ROLL_RATE_KD   1.0     // default 2.0
+
 #define PID_ROLL_RATE_KFF 0.0
 #define PID_ROLL_RATE_INTEGRATION_LIMIT    33.3
 
-#define PID_PITCH_RATE_KP  250.0
-#define PID_PITCH_RATE_KI  500.0
-#define PID_PITCH_RATE_KD  2.5
+#define PID_PITCH_RATE_KP  35.0
+#define PID_PITCH_RATE_KI  100.0
+#define PID_PITCH_RATE_KD  1.0
 #define PID_PITCH_RATE_KFF 0.0
 #define PID_PITCH_RATE_INTEGRATION_LIMIT   33.3
 
@@ -61,14 +61,14 @@
 #define PID_YAW_RATE_KFF 0.0
 #define PID_YAW_RATE_INTEGRATION_LIMIT     166.7
 
-#define PID_ROLL_KP  6.0
-#define PID_ROLL_KI  3.0
+#define PID_ROLL_KP  5.0
+#define PID_ROLL_KI  2.0
 #define PID_ROLL_KD  0.0
 #define PID_ROLL_KFF 0.0
 #define PID_ROLL_INTEGRATION_LIMIT    20.0
 
-#define PID_PITCH_KP  6.0
-#define PID_PITCH_KI  3.0
+#define PID_PITCH_KP  5.0
+#define PID_PITCH_KI  2.0
 #define PID_PITCH_KD  0.0
 #define PID_PITCH_KFF 0.0
 #define PID_PITCH_INTEGRATION_LIMIT   20.0

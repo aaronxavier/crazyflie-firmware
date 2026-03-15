@@ -173,6 +173,11 @@ GPIO_InitTypeDef GPIO_PassthroughOutput =
 //
 // And to get the PWM as a percentage we would need to divide the
 // Voltage needed with the Supply voltage.
+
+// Paste these into motors.c:
+#define MOTOR_POLY_A  (-0.00000836f)  // quadratic term
+#define MOTOR_POLY_B  (0.02388408f)  // linear term
+#define MAX_THRUST_GRAMS (360.8f)
 float motorsCompensateBatteryVoltage(uint32_t id, float iThrust, float supplyVoltage)
 {
   #ifdef CONFIG_ENABLE_THRUST_BAT_COMPENSATED
@@ -180,21 +185,21 @@ float motorsCompensateBatteryVoltage(uint32_t id, float iThrust, float supplyVol
 
   if (motorMap[id]->drvType == BRUSHED)
   {
-    /*
-    * A LiPo battery is supposed to be 4.2V charged, 3.7V mid-charge and 3V
-    * discharged.
-    *
-    * A suitable sanity check for disabling the voltage compensation would be
-    * under 2V. That would suggest a damaged battery. This protects against
-    * rushing the motors on bugs and invalid voltage levels.
-    */
-    if (supplyVoltage < 2.0f)
-    {
-      return iThrust;
-    }
-
+    // Original — untouched
+    if (supplyVoltage < 2.0f) return iThrust;
     float thrust = (iThrust / 65536.0f) * 60;
-    float volts = -0.0006239f * thrust * thrust + 0.088f * thrust;
+    float volts = MOTOR_POLY_A * thrust * thrust + MOTOR_POLY_B * thrust;
+    float ratio = volts / supplyVoltage;
+    return UINT16_MAX * ratio;
+  }
+  else if (motorMap[id]->drvType == BRUSHLESS)
+  {
+    // Adjust lower bound for your battery (6.0f = 2S, 9.0f = 3S, 12.0f = 4S)
+    if (supplyVoltage < 6.0f) return iThrust;
+
+    // Fill in your three measured values:
+    float thrust = (iThrust / 65536.0f) * MAX_THRUST_GRAMS;
+    float volts = MOTOR_POLY_A * thrust * thrust + MOTOR_POLY_B * thrust;
     float ratio = volts / supplyVoltage;
     return UINT16_MAX * ratio;
   }
