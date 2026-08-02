@@ -64,6 +64,13 @@
 static uint16_t preflightTimeoutDuration = PREFLIGHT_TIMEOUT_MS;
 static uint16_t landingTimeoutDuration = LANDING_TIMEOUT_MS;
 
+// Fallback for a stale external position/pose (mocap) stream. Without it the Kalman estimator dead
+// reckons on the IMU alone and the position estimate diverges within a second or two.
+// Set extPoseTimeout to 0 to disable the whole fallback.
+static uint16_t extPoseTimeoutDuration = 1000;      // ms without an ext pose packet before landing
+static uint16_t extPoseLandingDuration = 5000;      // ms of descent before cutting the motors
+static float extPoseLandingSpeed = 0.4f;            // m/s descent rate
+
 typedef struct {
   bool canFly;
   bool isFlying;
@@ -288,6 +295,10 @@ static void postTransitionActions(SupervisorMem_t* this, const supervisorState_t
     }
   }
 
+  if (newState == supervisorStateExtPoseLanding) {
+    DEBUG_PRINT("External pose lost, landing\n");
+  }
+
   if (newState == supervisorStateLocked) {
     DEBUG_PRINT("Locked, reboot required\n");
   }
@@ -300,7 +311,8 @@ static void postTransitionActions(SupervisorMem_t* this, const supervisorState_t
   if (newState != supervisorStateReadyToFly &&
       newState != supervisorStateFlying &&
       newState != supervisorStateWarningLevelOut &&
-      newState != supervisorStateLanded) {
+      newState != supervisorStateLanded &&
+      newState != supervisorStateExtPoseLanding) {
     supervisorRequestArming(false);
   }
 
@@ -342,6 +354,19 @@ static supervisorConditionBits_t updateAndPopulateConditions(SupervisorMem_t* th
     conditions |= SUPERVISOR_CB_COMMANDER_WDT_TIMEOUT;
   }
 
+  // External pose (mocap) staleness. Both conditions are derived from the same timestamp, so the
+  // fallback clears itself as soon as packets start flowing again.
+  const uint32_t tickOfLastExtPose = locSrvGetTickOfLastExtPosePacket();
+  if (extPoseTimeoutDuration > 0 && tickOfLastExtPose != 0) {
+    const uint32_t extPoseAge = currentTick - tickOfLastExtPose;
+    if (extPoseAge > M2T(extPoseTimeoutDuration)) {
+      conditions |= SUPERVISOR_CB_EXT_POSE_TIMEOUT;
+    }
+    if (extPoseAge > M2T(extPoseTimeoutDuration) + M2T(extPoseLandingDuration)) {
+      conditions |= SUPERVISOR_CB_EXT_POSE_LANDING_TIMEOUT;
+    }
+  }
+
   if (!checkEmergencyStopWatchdog(currentTick)) {
     conditions |= SUPERVISOR_CB_EMERGENCY_STOP;
   }
@@ -371,7 +396,8 @@ static supervisorConditionBits_t updateAndPopulateConditions(SupervisorMem_t* th
 
 static void updateLogData(SupervisorMem_t* this, const supervisorConditionBits_t conditions) {
   this->canFly = supervisorAreMotorsAllowedToRun();
-  this->isFlying = (this->state == supervisorStateFlying) || (this->state == supervisorStateWarningLevelOut);
+  this->isFlying = (this->state == supervisorStateFlying) || (this->state == supervisorStateWarningLevelOut) ||
+                   (this->state == supervisorStateExtPoseLanding);
   this->isTumbled = (conditions & SUPERVISOR_CB_IS_TUMBLED) != 0;
 
   this->infoBitfield = 0;
@@ -448,6 +474,24 @@ void supervisorOverrideSetpoint(setpoint_t* setpoint) {
       // Keep Z as it is
       break;
 
+    case supervisorStateExtPoseLanding:
+      // Same level-out as above, but descend instead of holding altitude. Horizontal position is
+      // not controlled at all here - the x/y estimate is exactly what we no longer trust.
+      // ponytail: open loop attitude + closed loop vz. vz drifts too without mocap, which is what
+      // the extPoseLandingDuration cutoff bounds. Barometer/flow deck fusion would tighten it.
+      setpoint->mode.x = modeDisable;
+      setpoint->mode.y = modeDisable;
+      setpoint->mode.roll = modeAbs;
+      setpoint->mode.pitch = modeAbs;
+      setpoint->mode.yaw = modeVelocity;
+      setpoint->attitude.roll = 0;
+      setpoint->attitude.pitch = 0;
+      setpoint->attitudeRate.yaw = 0;
+      setpoint->mode.z = modeVelocity;
+      setpoint->velocity.z = -extPoseLandingSpeed;
+      setpoint->velocity_body = false;
+      break;
+
     default:
       // Replace with null setpoint to stop motors
       memcpy(setpoint, &nullSetpoint, sizeof(nullSetpoint));
@@ -460,6 +504,7 @@ bool supervisorAreMotorsAllowedToRun() {
   return (this->state == supervisorStateReadyToFly) ||
          (this->state == supervisorStateFlying) ||
          (this->state == supervisorStateWarningLevelOut) ||
+         (this->state == supervisorStateExtPoseLanding) ||
          (this->state == supervisorStateLanded);
 }
 
@@ -557,5 +602,21 @@ PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, landedTimeout, &landingTimeoutDuratio
  * @brief Set to zero to disable tumble check
  */
 PARAM_ADD(PARAM_UINT8 | PARAM_PERSISTENT, tmblChckEn, &tumbleCheckEnabled)
+
+/**
+ * @brief Time (ms) without an external position/pose packet before an automatic landing is
+ * triggered. Set to 0 to disable. Only active once at least one packet has ever been received.
+ */
+PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, extPoseTimeout, &extPoseTimeoutDuration)
+
+/**
+ * @brief Max duration (ms) of the external-pose-loss landing before the motors are cut
+ */
+PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, extPoseLndTime, &extPoseLandingDuration)
+
+/**
+ * @brief Descent rate (m/s) used during the external-pose-loss landing
+ */
+PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, extPoseLndSpd, &extPoseLandingSpeed)
 
 PARAM_GROUP_STOP(supervisor)

@@ -48,6 +48,7 @@ static const char* const stateNames[] = {
   "Exception, free fall",
   "Locked",
   "Crashed",
+  "External pose lost, landing",
 };
 static_assert(sizeof(stateNames) / sizeof(stateNames[0]) == supervisorState_NrOfStates);
 
@@ -61,6 +62,8 @@ static const char* const conditionNames[] = {
   "isCrashed",
   "preflightTimeout",
   "landingTimeout",
+  "extPoseTimeout",
+  "extPoseLandingTimeout",
 };
 static_assert(sizeof(conditionNames) / sizeof(conditionNames[0]) == supervisorCondition_NrOfConditions);
 
@@ -185,6 +188,19 @@ static SupervisorStateTransition_t transitionsFlying[] = {
     .blockerCombiner = supervisorNever,
   },
   {
+    // The external position/pose stream (mocap) went stale. The estimator is now dead reckoning on
+    // the IMU only and will drift away, so bail out with a controlled descent rather than keep
+    // flying on a diverging estimate. Checked before the commander watchdog so that a dead
+    // workstation lands the drone instead of holding altitude in WarningLevelOut.
+    .newState = supervisorStateExtPoseLanding,
+
+    .triggers = SUPERVISOR_CB_EXT_POSE_TIMEOUT,
+    .negatedTriggers = SUPERVISOR_CB_NONE,
+    .triggerCombiner = supervisorAll,
+
+    .blockerCombiner = supervisorNever,
+  },
+  {
     .newState = supervisorStateWarningLevelOut,
 
     .triggers = SUPERVISOR_CB_COMMANDER_WDT_WARNING,
@@ -198,6 +214,58 @@ static SupervisorStateTransition_t transitionsFlying[] = {
 
     .triggers = SUPERVISOR_CB_NONE,
     .negatedTriggers = SUPERVISOR_CB_IS_FLYING,
+    .triggerCombiner = supervisorAll,
+
+    .blockerCombiner = supervisorNever,
+  }
+};
+
+static SupervisorStateTransition_t transitionsExtPoseLanding[] = {
+  {
+    // Descent did not finish in time (the z estimate is drifting too) - cut the motors rather than
+    // let it fly away with the motors running.
+    .newState = supervisorStateExceptFreeFall,
+
+    .triggers = SUPERVISOR_CB_EXT_POSE_LANDING_TIMEOUT | SUPERVISOR_CB_EMERGENCY_STOP,
+    .negatedTriggers = SUPERVISOR_CB_NONE,
+    .triggerCombiner = supervisorAny,
+
+    .blockerCombiner = supervisorNever,
+  },
+  {
+    .newState = supervisorStateCrashed,
+
+    .triggers = SUPERVISOR_CB_IS_TUMBLED,
+    .negatedTriggers = SUPERVISOR_CB_NONE,
+    .triggerCombiner = supervisorAny,
+
+    .blockerCombiner = supervisorNever,
+  },
+  {
+    .newState = supervisorStateReset,
+
+    .triggers = SUPERVISOR_CB_NONE,
+    .negatedTriggers = SUPERVISOR_CB_ARMED,
+    .triggerCombiner = supervisorAll,
+
+    .blockerCombiner = supervisorNever,
+  },
+  {
+    // Touch down: thrust dropped below idle.
+    .newState = supervisorStateLanded,
+
+    .triggers = SUPERVISOR_CB_NONE,
+    .negatedTriggers = SUPERVISOR_CB_IS_FLYING,
+    .triggerCombiner = supervisorAll,
+
+    .blockerCombiner = supervisorNever,
+  },
+  {
+    // Mocap came back, hand control back to the commander.
+    .newState = supervisorStateFlying,
+
+    .triggers = SUPERVISOR_CB_NONE,
+    .negatedTriggers = SUPERVISOR_CB_EXT_POSE_TIMEOUT,
     .triggerCombiner = supervisorAll,
 
     .blockerCombiner = supervisorNever,
@@ -310,6 +378,7 @@ SupervisorStateTransitionList_t transitionLists[] = {
   {SUPERVISOR_TRANSITION_ENTRY(transitionsExceptFreeFall)},
   {SUPERVISOR_TRANSITION_ENTRY(transitionsLocked)},
   {SUPERVISOR_TRANSITION_ENTRY(transitionsTumbled)},
+  {SUPERVISOR_TRANSITION_ENTRY(transitionsExtPoseLanding)},
 };
 static_assert(sizeof(transitionLists) / sizeof(transitionLists[0]) == supervisorState_NrOfStates);
 

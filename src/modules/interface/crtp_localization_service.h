@@ -98,4 +98,11 @@ void locSrvResetEmergencyStopRequest();
  */
 uint32_t locSrvGetEmergencyStopWatchdogNotificationTick();
 
+/**
+ * @brief Get the time for when the latest external position/pose packet was received.
+ *
+ * @return uint32_t  The system tick of the latest packet. 0 if none has ever been received.
+ */
+uint32_t locSrvGetTickOfLastExtPosePacket();
+
 #endif /* _CRTP_LOCALIZATION_SERVICE_H_ */

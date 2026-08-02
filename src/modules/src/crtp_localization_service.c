@@ -122,7 +122,7 @@ static float extPosStdDev = 0.01;
 static float extQuatStdDev = 4.5e-3;
 static bool isInit = false;
 static uint8_t my_id;
-static uint16_t tickOfLastPacket; // tick when last packet was received
+static uint32_t tickOfLastPacket; // tick when last packet was received (0 = never)
 
 static void locSrvCrtpCB(CRTPPacket* pk);
 static void extPositionHandler(CRTPPacket* pk);
@@ -404,6 +404,10 @@ uint32_t locSrvGetEmergencyStopWatchdogNotificationTick() {
   return emergencyStopWatchdogNotificationTick;
 }
 
+uint32_t locSrvGetTickOfLastExtPosePacket() {
+  return tickOfLastPacket;
+}
+
 // This logging group is deprecated (removed after August 2023)
 LOG_GROUP_START(ext_pos)
   LOG_ADD(LOG_FLOAT, X, &ext_pos.x)
@@ -452,7 +456,7 @@ LOG_GROUP_START(locSrvZ)
 /**
  * @brief time when data was received last (ms/ticks)
  */
-  LOG_ADD_CORE(LOG_UINT16, tick, &tickOfLastPacket)  // time when data was received last (ms/ticks)
+  LOG_ADD_CORE(LOG_UINT32, tick, &tickOfLastPacket)  // time when data was received last (ms/ticks)
 LOG_GROUP_STOP(locSrvZ)
 
 /**
