@@ -425,6 +425,9 @@ static void updateLogData(SupervisorMem_t* this, const supervisorConditionBits_t
   if (this->isCrashed) {
     this->infoBitfield |= 0x0080;
   }
+  if (supervisorStateExtPoseLanding == this->state) {
+    this->infoBitfield |= 0x0100;
+  }
 }
 
 void supervisorUpdate(const sensorData_t *sensors, const setpoint_t* setpoint, stabilizerStep_t stabilizerStep) {
@@ -572,6 +575,8 @@ LOG_GROUP_START(supervisor)
  * Bit 4 = is flying - the Crazyflie is flying.
  * Bit 5 = is tumbled - the Crazyflie is up side down.
  * Bit 6 = is locked - the Crazyflie is in the locked state and must be restarted.
+ * Bit 7 = is crashed - the Crazyflie needs crash recovery before it can be armed again.
+ * Bit 8 = external pose lost - the Crazyflie is landing because the mocap stream went stale.
  */
 LOG_ADD(LOG_UINT16, info, &supervisorMem.infoBitfield)
 LOG_GROUP_STOP(supervisor)
