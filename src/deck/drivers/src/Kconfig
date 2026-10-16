@@ -162,6 +162,15 @@ config DECK_EXTRX_TAER
     help
         Expecting TAER channel mapping instead of the default AETR.
 
+config DECK_ELRS
+    bool "Support the ExpressLRS receiver deck (CRSF on UART1)"
+    default n
+    help
+        ExpressLRS receiver wired to UART1 (RX1/TX1). Exposes the channels and
+        link state as the crsf log/param groups, sends battery and mode
+        telemetry back, and lets the transmitter arm the supervisor. The deck
+        has no 1-wire memory, so also set DECK_FORCE to "rcElrs".
+
 config DECK_FLAPPER
     bool "Enable Flapper Nimble+ PCB functionality"
     default n
